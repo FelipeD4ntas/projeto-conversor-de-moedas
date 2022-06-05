@@ -1,95 +1,112 @@
-const chaveAPI = '30ee27cf65ba91b18f740b1e';
+const chaveAPI = '8d39dddd8c52cd3f6669826c'
+const container = document.querySelector('[data-js="container"]');
 const selectEsquerdo = document.querySelector('[data-js="currency-one"]');
 const selectDireito = document.querySelector('[data-js="currency-two"]');
 const quantidadeMoeda = document.querySelector('[data-js="currency-one-times"]');
 const resultadoConversao = document.querySelector('[data-js="converted-value"]');
 const resultadoConversaoBruta = document.querySelector('[data-js="conversion-precision"]');
 
-let valorSelectEsquerdo = null;
-let valorSelectDireito = null;
-let nomeSelectEsquerdo = null;
-let nomeSelectDireito = null;
+let dadosMoedas = {};
 
-async function obterMoedas() {
+function buscarURL(moeda) {
+  return `https://v6.exchangerate-api.com/v6/${chaveAPI}/latest/${moeda}`;
+}
+
+function preencherSelects(dadosMoedas, moedaPadrao) {
+  return Object.keys(dadosMoedas.conversion_rates)
+    .map(moeda => `<option ${moeda === moedaPadrao ? 'selected' : ''}>${moeda}</option>`)
+    .join('');
+};
+
+function exibirSelectsPreenchidos() {
+  selectEsquerdo.innerHTML = preencherSelects(dadosMoedas, 'USD');
+  selectDireito.innerHTML = preencherSelects(dadosMoedas, 'BRL');
+};
+
+function exibirMoedasConvertidas() {
+  const valorSelectDireito = dadosMoedas.conversion_rates[selectDireito.value];
+  const cambioTotal = quantidadeMoeda.value * valorSelectDireito;
+
+  resultadoConversao.innerText = (cambioTotal).toFixed(2);
+  resultadoConversaoBruta.innerText = `1 ${selectEsquerdo.value} = ${1 * valorSelectDireito} ${selectDireito.value}`;
+};
+
+function dadosMoedaPadrao() {
+  resultadoConversao.innerText = (1 * dadosMoedas.conversion_rates.BRL).toFixed(2);
+  resultadoConversaoBruta.innerText = `1 USD = ${1 * dadosMoedas.conversion_rates.BRL} BRL`;
+};
+
+function buscarMensagemDeErro(tipoErro) {
+  return {
+    'unsuported-code': 'A moeda não existe em nosso banco de dados.',
+    'base-code-only-on-pro': 'Informações de moedas que não sejam USD ou EUR só podem ser acessadas a parte.',
+    'malformed-reques': 'O endpoint do seu request precisa seguir a estrutura a seguir: https://v6.exchangerate-api.com/v6/sua chave/latest/USD',
+    'invalid-key': 'A chave API não é válida.',
+    'quota-reached': 'Sua conta alcançou o limite de requests permitido em seu plano atual.',
+    'not-available-on-plan': 'Seu plano atual não permite este tipo de request.'
+  }[tipoErro] || 'Não foi possível obter as informações';
+};
+
+function alterarQuantidadeDeCambio(event) {
+  const valorSelectDireito = dadosMoedas.conversion_rates[selectDireito.value];
+  const quantidadeMoedasParaConversao = event.target.value;
+  return resultadoConversao.innerText = (quantidadeMoedasParaConversao * valorSelectDireito).toFixed(2);
+};
+
+async function fazerRequest(url) {
   try {
-    const response = await fetch(`https://v6.exchangerate-api.com/v6/${chaveAPI}/latest/USD`);
-
+    const response = await fetch(url);
+    const objetoRetornado = await response.json();
+    
     if (!response.ok) {
-      throw new Error('Não foi possível obter os dados da API.');
+      throw new Error('Sua conexão falhou, não foi possível obter as informações.');
     };
 
-    return response.json();
-  }
-  catch (error) {
-    console.log(error.message)
-  }
+    if (objetoRetornado.result === 'error') {
+      throw new Error(buscarMensagemDeErro(objetoRetornado['error-type']));
+    };
+
+    return objetoRetornado;
+
+  } catch(error) {
+    alert(error.message);
+    const div = document.createElement('div')
+    const button = document.createElement('button');
+
+    div.textContent = error.message;
+    div.classList.add('alert', 'alert-warning', 'alert-dismissible', 'fade', 'show');
+    button.classList.add('btn-close');
+    div.setAttribute('role', 'alert');
+    button.setAttribute('type', 'button');
+    button.setAttribute('aria-label', 'Close');
+    
+    button.addEventListener('click', () => div.remove())
+
+    div.appendChild(button);
+    container.insertAdjacentElement('afterend', div);
+  };
+
 };
 
-function preencherSelect(select, nomeMoedas, valorMoedas, moedaPadrao) {
-  nomeMoedas.forEach((moeda, index) => {
-    moeda === moedaPadrao 
-      ? select.innerHTML += `<option value="${valorMoedas[index]}" selected>${moeda}</option>` 
-      : select.innerHTML += `<option value="${valorMoedas[index]}">${moeda}</option>`
-  });
-};
-
-function obterValorPadraoMoeda(select) {
-  return select.options[select.selectedIndex].value
-};
-
-function obterNomePadraoMoeda(select) {
-  return select.options[select.selectedIndex].text
-};
-
-function obterValorMoeda(event) {
-  const quantidadeMoedaParaConversao = quantidadeMoeda.value;
-
-  valorSelectDireito = obterValorPadraoMoeda(selectDireito);
-  valorSelectEsquerdo = obterValorPadraoMoeda(selectEsquerdo);
-  nomeSelectDireito = obterNomePadraoMoeda(selectDireito);
-  nomeSelectEsquerdo = obterNomePadraoMoeda(selectEsquerdo);
-
-  if (event.target === selectEsquerdo) {
-    valorSelectEsquerdo = event.target.options[event.target.selectedIndex].value;
-    nomeSelectEsquerdo = event.target.options[event.target.selectedIndex].text;
-  }
+async function iniciarJS() {
+  const dadosExternoMoedas = await fazerRequest(buscarURL('USD'));
+  dadosMoedas = {...dadosExternoMoedas};
   
-  if (event.target === selectDireito) {
-    valorSelectDireito = event.target.options[event.target.selectedIndex].value;
-    nomeSelectDireito = event.target.options[event.target.selectedIndex].text;
-  }
-  
-  converterMoedas(valorSelectEsquerdo, valorSelectDireito, nomeSelectEsquerdo, nomeSelectDireito, quantidadeMoedaParaConversao);
+  exibirSelectsPreenchidos();
+  dadosMoedaPadrao();
 };
 
-function converterMoedas(valorOptionUm, valorOptionDois, nomeMoedaOptionUm, nomeMoedaOptionDois, quantidadeMoedaParaConversao) {
-  const valorBruto = (valorOptionUm * valorOptionDois).toFixed(2);
-  const valorConversao = (valorBruto * quantidadeMoedaParaConversao).toFixed(2);
-  resultadoConversaoBruta.innerHTML = `1 ${nomeMoedaOptionUm} = ${valorBruto} ${nomeMoedaOptionDois}`;
-  resultadoConversao.innerHTML = valorConversao;
-};
+async function alterarMoedaPadraoDeCambio(event) {
+  const dadosExternoMoedas = await fazerRequest(buscarURL(event.target.value));
+  dadosMoedas = {...dadosExternoMoedas};
 
-async function obterDadosMoedas() {
-  const retornoApi = await obterMoedas();
-  
-  const arrayMoedas = Object.entries(retornoApi.conversion_rates);
-  const nomeMoedas = arrayMoedas.map(nomeMoeda => nomeMoeda[0]);
-  const valorMoedas = arrayMoedas.map(valorMoeda => valorMoeda[1]);
+  exibirMoedasConvertidas();
+}
 
-  preencherSelect(selectEsquerdo, nomeMoedas, valorMoedas,'USD');
-  preencherSelect(selectDireito, nomeMoedas, valorMoedas, 'BRL');
+quantidadeMoeda.addEventListener('input', alterarQuantidadeDeCambio);
 
-  const valorPadraoSelectDireito = obterValorPadraoMoeda(selectDireito);
-  const valorPadraoSelectEsquerdo = obterValorPadraoMoeda(selectEsquerdo);
-  const nomePadraoSelectDireito =  obterNomePadraoMoeda(selectDireito);
-  const nomePadraoSelectEsquerdo =  obterNomePadraoMoeda(selectEsquerdo);
-  const quantidadePadraoMoedaParaConversao = 1;
+selectDireito.addEventListener('input', exibirMoedasConvertidas);
 
-  converterMoedas(valorPadraoSelectEsquerdo, valorPadraoSelectDireito, nomePadraoSelectEsquerdo, nomePadraoSelectDireito, quantidadePadraoMoedaParaConversao);
-};
+selectEsquerdo.addEventListener('input', alterarMoedaPadraoDeCambio);
 
-selectEsquerdo.addEventListener('input', obterValorMoeda);
-selectDireito.addEventListener('input', obterValorMoeda);
-quantidadeMoeda.addEventListener('input', obterValorMoeda);
-
-obterDadosMoedas();
+iniciarJS();
